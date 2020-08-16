@@ -1,78 +1,67 @@
 #include <iostream>
+#include <functional>
 #include <fstream>
 #include <cstdlib>
+#include <cmath>
 #include "Render.h"
 #include "../Obj/Obj.h"
+#include "../structures/structures.h"
 
 #define LOG(x) std::cout << x << std::endl
 
 Render::Render()
     : width(0), height(0), vp_x(0), vp_y(0), vp_width(0), vp_height(0)
 {
-    // width = 0;
-    // height = 0;
-    // vp_x = 0;
-    // vp_y = 0;
-    // vp_width = 0;
-    // vp_height = 0;
-
-    curr_color[0] = 255;
-    curr_color[1] = 255;
-    curr_color[2] = 255;
+    curr_color = color(255, 255, 255);
 }
 
 Render::Render(unsigned int width, unsigned int height)
     : width(width), height(height), vp_x(0), vp_y(0), vp_width(width-1), vp_height(height-1)
 {
-    // this->width = width;
-    // this->height = height;
-    // vp_x = 0;
-    // vp_y = 0;
-    // vp_width = 0;
-    // vp_height = 0;
-
     // BLACK
-    curr_color[0] = 0;
-    curr_color[1] = 0;
-    curr_color[2] = 0;
+    curr_color = color(0, 0, 0);
+
+    glCreateWindow(width, height);
 };
 
 Render::~Render() {}
 
 void Render::glVertexCoord(unsigned int x, unsigned int y) {
-    window[y][x][0] = curr_color[0];
-    window[y][x][1] = curr_color[1];
-    window[y][x][2] = curr_color[2];
+    window[y][x] = curr_color;
 }
 
 void Render::glCreateWindow(unsigned int width, unsigned int height) {
     this->width = width;
     this->height = height;
-
-    // Assign current color values in matrix
-    this->window = new unsigned char** [height];
-    for (unsigned int y = 0; y < height; y++) {
-        window[y] = new unsigned char* [width];
-        for (unsigned int x = 0; x < width; x++) {
-            window[y][x] = new unsigned char [3];          
-            glVertexCoord(x, y);
-        }
-    }
+    glClear();
+    glViewPort(0, 0, width, height);
 }
 
 void Render::glClear() {
+    // Assign current color values in matrix
+    this->window = new color* [height];
     for (unsigned int y = 0; y < height; y++) {
+        window[y] = new color [width];
         for (unsigned int x = 0; x < width; x++) {
             glVertexCoord(x, y);
-        }  
+        }
+    }
+
+    // Create zbuffer with negative values
+    this->zbuffer = new double* [height];
+    for (unsigned int y = 0; y < height; y++) {
+        zbuffer[y] = new double [width];
+        for (unsigned int x = 0; x < width; x++) {
+            zbuffer[y][x] = -100.0;
+        }
     }
 }
 
 void Render::glClearColor(float r, float g, float b) {
 
-    curr_color[0] = (unsigned char) static_cast<int>(b * 255);
-    curr_color[1] = (unsigned char) static_cast<int>(g * 255);
-    curr_color[2] = (unsigned char) static_cast<int>(r * 255);
+    curr_color.r = (unsigned char) static_cast<int>(b * 255);
+    curr_color.g = (unsigned char) static_cast<int>(g * 255);
+    curr_color.b = (unsigned char) static_cast<int>(r * 255);
 
     for (unsigned int y = 0; y < height; y++) {
         for (unsigned int x = 0; x < width; x++) {
@@ -83,9 +72,9 @@ void Render::glClearColor(float r, float g, float b) {
 
 void Render::glColor(float r, float g, float b) {
 
-    curr_color[0] = (unsigned char) static_cast<int>(b * 255);
-    curr_color[1] = (unsigned char) static_cast<int>(g * 255);
-    curr_color[2] = (unsigned char) static_cast<int>(r * 255);
+    curr_color.r = (unsigned char) static_cast<int>(b * 255);
+    curr_color.g = (unsigned char) static_cast<int>(g * 255);
+    curr_color.b = (unsigned char) static_cast<int>(r * 255);
 }
 
 void Render::glVertex(float x, float y) {
@@ -169,7 +158,7 @@ void Render::glFinish() {
         // TODO: PIXEL DATA
         for (unsigned int y = 0; y < height; y++) {
             for (unsigned int x = 0; x < width; x++) {
-                myfile.write((char*) window[y][x], 3);
+                myfile.write((char*) &window[y][x], 3);
             }
         }    
     }
@@ -291,7 +280,7 @@ void Render::integralPaint(unsigned int x0, unsigned int y0, unsigned int x1, un
     unsigned int dx = std::abs(static_cast<int>(x1 - x0));
     unsigned int dy = std::abs(static_cast<int>(y1 - y0));
 
-    unsigned int BLACK[3] = {0, 0, 0};
+    color BLACK = color(0, 0, 0);
 
     bool steep = dy > dx;
 
@@ -344,7 +333,7 @@ void Render::integralPaint(unsigned int x0, unsigned int y0, unsigned int x1, un
 
         /* In case there is no color in coord we paint, else we return the color to default (BLACK) */
         for (int x_val = temp_x; x_val >= 0; x_val--) {
-            int n = memcmp(BLACK, window[temp_y][x_val], sizeof(BLACK)); //Check color is BLACK at [temp_y][x]
+            int n = memcmp(&BLACK, &window[temp_y][x_val], sizeof(BLACK)); //Check color is BLACK at [temp_y][x]
             bool empty = n == 0;
 
             if (horizontal) {
@@ -355,9 +344,9 @@ void Render::integralPaint(unsigned int x0, unsigned int y0, unsigned int x1, un
             if (empty) {
                 glVertexCoord(x_val, temp_y);
             } else {
-                window[temp_y][x_val][0] = 0;
-                window[temp_y][x_val][1] = 0;
-                window[temp_y][x_val][2] = 0;
+                window[temp_y][x_val].r = 0;
+                window[temp_y][x_val].g = 0;
+                window[temp_y][x_val].b = 0;
             }
         }
 
@@ -369,20 +358,217 @@ void Render::integralPaint(unsigned int x0, unsigned int y0, unsigned int x1, un
     }
 }
 
-void Render::loadModel(std::string filename, int translate[2], int scale[2]) {
+void Render::loadModel(std::string filename, V3 translate, V3 scale, bool isWireframe = false) {
     Obj model = Obj(filename);
 
-    for (auto &&face : model.faces) {
-        for (int i = 0; i < face.size(); i++) {
-                std::deque<float> v0 = model.vertices[ face[i][0] - 1 ];
-                std::deque<float> v1 = model.vertices[ face[(i + 1) % face.size()][0] - 1 ];
+    V3 light(0.0, 0.0, 1.0);
 
-                unsigned int x0 = static_cast<int>(v0[0] * scale[0] + translate[0]);
-                unsigned int y0 = static_cast<int>(v0[1] * scale[1] + translate[1]);
-                unsigned int x1 = static_cast<int>(v1[0] * scale[0] + translate[0]);
-                unsigned int y1 = static_cast<int>(v1[1] * scale[1] + translate[1]);
+    for (auto &&face : model.faces) {
+        if (isWireframe) {
+            for (int i = 0; i < face.size(); i++) {
+                V3 v0 = model.vertices[ face[i][0] - 1 ];
+                V3 v1 = model.vertices[ face[(i + 1) % face.size()][0] - 1 ];
+
+                unsigned int x0 = static_cast<int>(v0.x * scale.x + translate.x);
+                unsigned int y0 = static_cast<int>(v0.y * scale.y + translate.y);
+                unsigned int x1 = static_cast<int>(v1.x * scale.x + translate.x);
+                unsigned int y1 = static_cast<int>(v1.y * scale.y + translate.y);
 
                 glLineCoord(x0, y0, x1, y1);
+            }
+        }
+        else {
+            V3 v0 = model.vertices[ face[0][0] - 1 ];
+            V3 v1 = model.vertices[ face[1][0] - 1 ];
+            V3 v2 = model.vertices[ face[2][0] - 1 ];
+
+            V3 t_v0 = transform(v0, translate, scale);
+            V3 t_v1 = transform(v1, translate, scale);
+            V3 t_v2 = transform(v2, translate, scale);
+
+            V3 normal = cross_product(vert_substract(t_v1, t_v0), vert_substract(t_v2, t_v0));
+
+            normal = normalize(normal);
+
+            double intensity = dot_product(normal, light);
+            
+            LOG(intensity);
+
+            curr_color = color((char)static_cast<int>(intensity * 255), (char)static_cast<int>(intensity * 255), (char)static_cast<int>(intensity * 255));
+
+            if (intensity >= 0.0)
+                triangle_bc(v0, v1, v2);
+
+            if (face.size() > 3) {
+                V3 v3 = model.vertices[ face[3][0] - 1 ];
+                v3 = transform(v3, translate, scale);
+
+                if (intensity >= 0.0)
+                    triangle_bc(v0, v2, v3);
+            }
         }
     }
 }
+
+void Render::triangle (V3 A, V3 B, V3 C) {
+    if (A.y > B.y) {
+        std::swap(A.x, B.x);
+        std::swap(A.y, B.y);
+    }
+    if (A.y > C.y) {
+        std::swap(A.x, C.x);
+        std::swap(A.y, C.y);
+    }
+    if (B.y > C.y) {
+        std::swap(B.x, C.x);
+        std::swap(B.y, C.y);
+    }
+    if (A.y == C.y)
+        return;
+
+    if(A.y == B.y)
+        flat_bottom_triangle(A, B, C);
+    
+    else if (B.y == C.y)
+        flat_top_triangle(A, B, C);
+
+    else {
+        int x4 = static_cast<int>(A.x + (C.x - A.x)/(C.y - A.y) * (B.y - A.y));
+        V3 D(x4, B.y, 0.0f);
+        flat_bottom_triangle(D, B, C);
+        flat_top_triangle(A, B, D);
+    }
+};
+
+void Render::triangle_bc (V3 A, V3 B, V3 C) {
+    int minX = static_cast<int>(std::min(std::min(A.x, B.x), C.x));
+    int minY = static_cast<int>(std::min(std::min(A.y, B.y), C.y));
+    int maxX = static_cast<int>(std::max(std::max(A.x, B.x), C.x));
+    int maxY = static_cast<int>(std::max(std::max(A.y, B.y), C.y));
+
+    for (int y = minY; y < maxY; y++) {
+        for (int x = minX; x < maxX; x++) {
+
+            V3 XY(static_cast<double>(x), static_cast<double>(y), 0.0);
+            V3 coords = baryCoords(A, B, C, XY);
+
+            double u = coords.x;
+            double v = coords.y;
+            double w = coords.z;
+
+            if (u >= 0 && v >= 0 && w >= 0) {
+                double z = (A.z * u) + (B.z * v) + (C.z * w);
+
+                if (x >= 0 && y >= 0) {
+                    if (z > zbuffer[y][x]) {
+                        glVertexCoord(x, y);
+                        zbuffer[y][x] = z;
+                    }
+                }
+            }
+        }
+    }
+};
+
+V3 Render::baryCoords(V3 A, V3 B, V3 C, V3 P) {
+    V3 coords;
+
+    try {
+        double u = ( ((B.y - C.y)*(P.x - C.x) + (C.x - B.x)*(P.y - C.y) ) / ((B.y - C.y)*(A.x - C.x) + (C.x - B.x)*(A.y - C.y)) );
+
+        double v = ( ((C.y - A.y)*(P.x - C.x) + (A.x - C.x)*(P.y - C.y) ) / ((B.y - C.y)*(A.x - C.x) + (C.x - B.x)*(A.y - C.y)) );
+
+        double w = 1 - u - v;
+
+        //Asign values to array
+        coords.x = u;
+        coords.y = v;
+        coords.z = w;
+    }
+    catch(const std::exception& e) {
+        coords.x = -1.0;
+        coords.y = -1.0;
+        coords.z = -1.0;
+    }
+    
+    return coords;
+};
+
+V3 Render::transform(V3 vertex, V3 translate, V3 scale) {
+    V3 v3;
+    v3.x = vertex.x * scale.x + translate.x;
+    v3.y = vertex.y * scale.y + translate.y;
+    v3.z = vertex.z * scale.z + translate.z;
+
+    return v3;
+};
+
+void Render::flat_bottom_triangle (V3 v1, V3 v2, V3 v3) {
+    for (int y = static_cast<int>(v1.y); y < static_cast<int>(v3.y); y++) {
+        int xi = static_cast<int>(v1.x + (v3.x - v1.x)/(v3.y = v1.y) * (y - v1.y));
+        int xf = static_cast<int>(v2.x + (v3.x - v2.x)/(v3.y = v2.y) * (y - v2.y));
+
+        if (xi > xf) {
+            int temp_xi = xi;
+            xi, xf = xf, temp_xi;
+        }
+
+        for (int x = xi; x < xf; x++)
+            glVertexCoord(x, y); 
+    }
+};
+
+void Render::flat_top_triangle (V3 v1, V3 v2, V3 v3) {
+    for (int y = static_cast<int>(v1.y); y < static_cast<int>(v3.y); y++) {
+        int xi = static_cast<int>(v2.x + (v1.x - v2.x)/(v1.y = v2.y) * (y - v2.y));
+        int xf = static_cast<int>(v3.x + (v1.x - v3.x)/(v1.y = v3.y) * (y - v3.y));
+
+        if (xi > xf) {
+            int temp_xi = xi;
+            xi, xf = xf, temp_xi;
+        }
+
+        for (int x = xi; x < xf; x++)
+            glVertexCoord(x, y); 
+    }
+};
+
+V3 Render::vert_substract(V3 v0, V3 v1) {
+    V3 result;
+    
+    result.x = v0.x - v1.x;
+    result.y = v0.y - v1.y;
+    result.z = v0.z - v1.z;
+
+    return result;
+};
+
+V3 Render::cross_product(V3 A, V3 B) {
+    V3 result;
+
+    result.x = (A.y * B.z) - (A.z * B.y);
+    result.y = (A.x * B.z) - (A.z * B.x);
+    result.z = (A.x * B.y) - (A.y * B.x);
+
+    return result;
+};
+
+double Render::dot_product(V3 v0, V3 v1) {
+    double res = (v0.x * v1.x) + (v0.y * v1.y) + (v0.z * v1.z);
+    return res;
+};
+
+V3 Render::normalize(V3 v0) {
+    V3 normalized;
+    double norma = (v0.x * v0.x) + (v0.y * v0.y) + (v0.z * v0.z);
+    norma = std::sqrt(norma);
+
+    normalized.x = v0.x / norma;
+    normalized.x = v0.y / norma;
+    normalized.x = v0.z / norma;
+
+    return normalized;
+ };
+
+
+
